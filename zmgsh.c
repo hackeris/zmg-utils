@@ -23,7 +23,7 @@ int ls_dentry(struct zmg_dir_entry *dentry) {
 
     for (int i = 0; i < dentry->n_files; i++) {
         printf("%s\n", fentry->name);
-        fentry = (struct zmg_file_entry *) (((char *) fentry + 1) + fentry->data_size);
+        fentry = (struct zmg_file_entry *) (((char *) fentry) + fentry->off_data + fentry->data_size);
     }
     return 0;
 }

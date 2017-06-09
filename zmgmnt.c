@@ -82,8 +82,6 @@ static int zmgfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     (void) offset;
     (void) fi;
 
-    log("readdir: %s\n", path);
-
     struct zmg_dir_entry *root = open_root(zmgmap);
     struct zmg_dir_entry *dentry = find_dir_entry_at(path, root);
 
@@ -95,15 +93,15 @@ static int zmgfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, "..", NULL, 0);
 
     struct zmg_dir_entry *dentries = (struct zmg_dir_entry *) (((char *) dentry) + dentry->off_data);
-    struct zmg_file_entry *fentries = (struct zmg_file_entry *) (dentries + dentry->n_dirs);
+    struct zmg_file_entry *fentry = (struct zmg_file_entry *) (dentries + dentry->n_dirs);
 
     for (int i = 0; i < dentry->n_dirs; i++) {
         filler(buf, dentries[i].name, NULL, 0);
     }
 
     for (int i = 0; i < dentry->n_files; i++) {
-        filler(buf, fentries[i].name, NULL, 0);
-        fentries = (struct zmg_file_entry *) (((char *) fentries + 1) + fentries->data_size);
+        filler(buf, fentry->name, NULL, 0);
+        fentry = (struct zmg_file_entry *) (((char *) fentry) + fentry->off_data + fentry->data_size);
     }
     return 0;
 }
