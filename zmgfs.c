@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <stdlib.h>
 
 #include "zmgfs.h"
 
@@ -72,6 +73,64 @@ int zip_buffer_to_file(const char *buffer, size_t size, FILE *dest, size_t *outs
     return Z_OK;
 }
 
+int unzip_buffer_to_buffer(const char *input, size_t input_size, char *output, size_t *output_size) {
+
+    int ret;
+    unsigned have;
+    z_stream strm;
+    unsigned char out[CHUNK_SIZE];
+
+    /* allocate inflate state */
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = 0;
+    strm.next_in = Z_NULL;
+    ret = inflateInit(&strm);
+    if (ret != Z_OK) {
+        return ret;
+    }
+
+    size_t pos = 0;
+    size_t outpos = 0;
+    /* decompress until deflate stream ends or end of file */
+    do {
+        int blk = (int) ((input_size - pos) > CHUNK_SIZE ? CHUNK_SIZE : (input_size - pos));
+        if (blk == 0) {
+            break;
+        }
+        strm.avail_in = (uInt) blk;
+        strm.next_in = (Bytef *) (input + pos);
+
+        /* run inflate() on input until output input not full */
+        do {
+            strm.avail_out = CHUNK_SIZE;
+            strm.next_out = out;
+            ret = inflate(&strm, Z_NO_FLUSH);
+            assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
+            switch (ret) {
+                case Z_NEED_DICT:
+                    ret = Z_DATA_ERROR;     /* and fall through */
+                case Z_DATA_ERROR:
+                case Z_MEM_ERROR:
+                    (void) inflateEnd(&strm);
+                    return ret;
+            }
+            have = CHUNK_SIZE - strm.avail_out;
+            memcpy(&output[outpos], out, have);
+            outpos += have;
+        } while (strm.avail_out == 0);
+
+        pos += blk;
+
+        /* done when inflate() says it's done */
+    } while (ret != Z_STREAM_END);
+
+    /* clean up and return */
+    (void) inflateEnd(&strm);
+    return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
+}
+
 int unzip_buffer_to_file(const char *buffer, size_t size, FILE *dest) {
 
     int ret;
@@ -86,8 +145,9 @@ int unzip_buffer_to_file(const char *buffer, size_t size, FILE *dest) {
     strm.avail_in = 0;
     strm.next_in = Z_NULL;
     ret = inflateInit(&strm);
-    if (ret != Z_OK)
+    if (ret != Z_OK) {
         return ret;
+    }
 
     size_t pos = 0;
     /* decompress until deflate stream ends or end of file */
@@ -145,4 +205,80 @@ int zip_file_to_file(const char *filename, FILE *dest, size_t *outsize) {
 
     close(_fd);
     return ret;
+}
+
+
+const char *last_name_of(const char *path) {
+    int len = (int) strlen(path);
+    int i = len - 1;
+    while (i >= 0) {
+        if (path[i] == '/') {
+            return &(path[i + 1]);
+        }
+        i--;
+    }
+
+    return path;
+}
+
+struct zmg_dir_entry *find_dir_entry_from_dir(const char *name, struct zmg_dir_entry *dentry) {
+
+    struct zmg_dir_entry *entries = (struct zmg_dir_entry *) (((char *) dentry) + dentry->off_data);
+    for (int i = 0; i < dentry->n_dirs; i++) {
+        if (strcmp(entries[i].name, name) == 0) {
+            return &entries[i];
+        }
+    }
+    return NULL;
+}
+
+struct zmg_dir_entry *find_dir_entry_at(const char *path, struct zmg_dir_entry *root) {
+
+    if (path[0] == '\0') {
+        return root;
+    } else if (path[0] == '/') {
+        path++;
+    }
+
+    char *pathname = strdup(path);
+
+    struct zmg_dir_entry *dentry = root;
+
+    char *restpath = pathname;
+    char *dirname = restpath;
+    restpath = strchr(pathname, '/');
+    while (restpath != NULL) {
+        *restpath = '\0';
+        restpath++;
+
+        dentry = find_dir_entry_from_dir(dirname, dentry);
+        if (dentry == NULL) {
+            goto out;
+        }
+
+        dirname = restpath;
+        restpath = strchr(restpath, '/');
+    }
+
+    dentry = find_dir_entry_from_dir(dirname, dentry);
+
+    out:
+    free(pathname);
+    return dentry;
+}
+
+struct zmg_file_entry *find_file_entry_at(const char *name, struct zmg_dir_entry *dentry) {
+
+    struct zmg_dir_entry *entries = (struct zmg_dir_entry *) (((char *) dentry) + dentry->off_data);
+    struct zmg_file_entry *fentry = (struct zmg_file_entry *) ((char *) (entries + dentry->n_dirs));
+
+    int nfiles = dentry->n_files;
+    while (nfiles-- > 0) {
+
+        if (strcmp(fentry->name, name) == 0) {
+            return fentry;
+        }
+        fentry = (struct zmg_file_entry *) (((char *) fentry) + fentry->off_data + fentry->data_size);
+    }
+    return NULL;
 }

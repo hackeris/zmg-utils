@@ -47,8 +47,18 @@ void init_zmg_header(struct zmg_header *header);
 
 int zip_buffer_to_file(const char *buffer, size_t size, FILE *dest, size_t *outsize, int level);
 
+int unzip_buffer_to_buffer(const char *input, size_t input_size, char *output, size_t *output_size);
+
 int unzip_buffer_to_file(const char *buffer, size_t size, FILE *dest);
 
 int zip_file_to_file(const char *filename, FILE *dest, size_t *outsize);
+
+const char *last_name_of(const char *path);
+
+struct zmg_dir_entry *find_dir_entry_from_dir(const char *name, struct zmg_dir_entry *dentry);
+
+struct zmg_dir_entry *find_dir_entry_at(const char *path, struct zmg_dir_entry *root);
+
+struct zmg_file_entry *find_file_entry_at(const char *name, struct zmg_dir_entry *dentry);
 
 #endif //ZMG_UTILS_ZMGFS_H
