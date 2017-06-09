@@ -234,10 +234,11 @@ struct zmg_dir_entry *find_dir_entry_from_dir(const char *name, struct zmg_dir_e
 
 struct zmg_dir_entry *find_dir_entry_at(const char *path, struct zmg_dir_entry *root) {
 
+    if (path[0] == '/') {
+        path++;
+    }
     if (path[0] == '\0') {
         return root;
-    } else if (path[0] == '/') {
-        path++;
     }
 
     char *pathname = strdup(path);
@@ -267,7 +268,7 @@ struct zmg_dir_entry *find_dir_entry_at(const char *path, struct zmg_dir_entry *
     return dentry;
 }
 
-struct zmg_file_entry *find_file_entry_at(const char *name, struct zmg_dir_entry *dentry) {
+struct zmg_file_entry *find_file_entry_with_filename_at(const char *name, struct zmg_dir_entry *dentry) {
 
     struct zmg_dir_entry *entries = (struct zmg_dir_entry *) (((char *) dentry) + dentry->off_data);
     struct zmg_file_entry *fentry = (struct zmg_file_entry *) ((char *) (entries + dentry->n_dirs));
@@ -279,6 +280,23 @@ struct zmg_file_entry *find_file_entry_at(const char *name, struct zmg_dir_entry
             return fentry;
         }
         fentry = (struct zmg_file_entry *) (((char *) fentry) + fentry->off_data + fentry->data_size);
+    }
+    return NULL;
+}
+
+
+struct zmg_file_entry *find_file_entry_at(const char *path, struct zmg_dir_entry *direntry) {
+    char filepath[256];
+    strcpy(filepath, path);
+    char *filename = (char *) last_name_of(filepath);
+    filename[-1] = '\0';
+
+    struct zmg_dir_entry *dentry = find_dir_entry_at(filepath, direntry);
+    if (dentry != NULL) {
+        struct zmg_file_entry *fentry = find_file_entry_with_filename_at(filename, dentry);
+        if (fentry != NULL) {
+            return fentry;
+        }
     }
     return NULL;
 }

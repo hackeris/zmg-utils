@@ -49,7 +49,7 @@ int cat_file(const char *path, const char *buff) {
     struct zmg_dir_entry *root = (struct zmg_dir_entry *) (buff + sizeof(struct zmg_header));
     struct zmg_dir_entry *dentry = find_dir_entry_at(filepath, root);
 
-    struct zmg_file_entry *fentry = find_file_entry_at(filename, dentry);
+    struct zmg_file_entry *fentry = find_file_entry_with_filename_at(filename, dentry);
 
     char *zipbuf = ((char *) fentry) + fentry->off_data;
 

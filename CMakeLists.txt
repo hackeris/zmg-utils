@@ -9,5 +9,9 @@ set(COMMON_SOURCE
 
 add_executable(makezmg ${COMMON_SOURCE} makezmg.c)
 add_executable(zmgsh ${COMMON_SOURCE} zmgsh.c)
+add_executable(zmgmnt ${COMMON_SOURCE} zmgmnt.c)
+target_compile_definitions(zmgmnt
+        PRIVATE -D_FILE_OFFSET_BITS=64)
 target_link_libraries(makezmg z)
 target_link_libraries(zmgsh z)
+target_link_libraries(zmgmnt z fuse pthread)

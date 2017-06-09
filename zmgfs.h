@@ -59,6 +59,8 @@ struct zmg_dir_entry *find_dir_entry_from_dir(const char *name, struct zmg_dir_e
 
 struct zmg_dir_entry *find_dir_entry_at(const char *path, struct zmg_dir_entry *root);
 
-struct zmg_file_entry *find_file_entry_at(const char *name, struct zmg_dir_entry *dentry);
+struct zmg_file_entry *find_file_entry_with_filename_at(const char *name, struct zmg_dir_entry *dentry);
+
+struct zmg_file_entry *find_file_entry_at(const char *path, struct zmg_dir_entry *dentry);
 
 #endif //ZMG_UTILS_ZMGFS_H
