@@ -108,11 +108,11 @@ int compress_dir_l1(const char *pwd, const char *path, FILE *dest, struct dir_en
     HASH_FIND_STR(*poses, path, pos);
     assert(pos != NULL);
     off_t entoff = pos->offset;
-    off_t nowoff = ftell(dest);
-    pos->dirent.off_data = (uint64_t) (nowoff - start_off);
+    pos->dirent.off_data = (uint64_t) (start_off - entoff);
     pos->dirent.n_files = n_files;
     pos->dirent.n_dirs = n_dirs;
 
+    off_t nowoff = ftell(dest);
     fseek(dest, entoff, SEEK_SET);
     fwrite(&pos->dirent, sizeof(pos->dirent), 1, dest);
     fseek(dest, nowoff, SEEK_SET);
@@ -143,7 +143,7 @@ void compress_dir(const char *src, const char *out_filename) {
     strcpy(curpos->dirent.name, "");
     curpos->dirent.n_dirs = 0;
     curpos->dirent.n_files = 0;
-    curpos->dirent.off_data = 0;
+    curpos->dirent.off_data = sizeof(curpos->dirent);
     HASH_ADD_STR(poses, path, curpos);
 
     fwrite(&curpos->dirent, sizeof(curpos->dirent), 1, dest);
