@@ -78,6 +78,8 @@ int compress_dir_l1(const char *pwd, const char *path, FILE *dest, struct dir_en
 
             char file_abspath[256];
             memset(file_abspath, 0, sizeof(file_abspath));
+            sprintf(file_abspath, "%s/%s", path, dir->d_name);
+            printf("%s\n", file_abspath);
             sprintf(file_abspath, "%s/%s", abspath, dir->d_name);
 
             struct zmg_file_entry entry;
