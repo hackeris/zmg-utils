@@ -91,9 +91,11 @@ int compress_dir_l1(const char *pwd, const char *path, FILE *dest, struct dir_en
             off_t entry_off = ftell(dest);
 
             //  write ziped data
-            size_t data_size;
+            size_t data_size = 0;
             fseek(dest, sizeof(entry), SEEK_CUR);
-            zip_file_to_file(file_abspath, dest, &data_size);
+            if (entry.file_size > 0) {
+                zip_file_to_file(file_abspath, dest, &data_size);
+            }
 
             //  seek back and write entry
             fseek(dest, entry_off, SEEK_SET);
