@@ -56,7 +56,6 @@ static int zmgfs_getattr(const char *path, struct stat *stbuf) {
     if (dentry != NULL) {
         stbuf->st_mode = S_IFDIR | 0555;
         stbuf->st_nlink = 2;
-        stbuf->st_size = 4 * 1024;
         return 0;
     }
 
