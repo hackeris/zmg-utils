@@ -31,13 +31,13 @@ struct dir_entry_pos {
     UT_hash_handle hh;
 };
 
-int compress_dir_l1(const char *pwd, const char *path, FILE *dest, struct dir_entry_pos **poses) {
+int compress_dir_l1(const char *root, const char *path, FILE *dest, struct dir_entry_pos **poses) {
 
     off_t start_off = ftell(dest);
     int n_dirs = 0, n_files = 0;
 
     char abspath[256];
-    sprintf(abspath, "%s/%s", pwd, path);
+    sprintf(abspath, "%s/%s", root, path);
 
     DIR *d = opendir(abspath);
     if (d == NULL) { return 0; }
@@ -122,7 +122,7 @@ int compress_dir_l1(const char *pwd, const char *path, FILE *dest, struct dir_en
     return 0;
 }
 
-void compress_dir(const char *src, const char *out_filename) {
+void compress_dir(const char *root, const char *out_filename) {
 
     struct dir_path {
         char path[256];
@@ -162,11 +162,11 @@ void compress_dir(const char *src, const char *out_filename) {
     while (count > 0) {
 
         dir = dirs;
-        compress_dir_l1(src, dir->path, dest, &poses);
+        compress_dir_l1(root, dir->path, dest, &poses);
 
         dirs = dirs->next;
 
-        sprintf(abspath, "%s/%s", src, dir->path);
+        sprintf(abspath, "%s/%s", root, dir->path);
         DIR *d = opendir(abspath);
         assert(d != NULL);
         struct dirent *dire;
