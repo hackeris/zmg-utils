@@ -22,7 +22,7 @@
 
 #include "zmgfs.h"
 
-#define DEBUG
+//#define DEBUG
 
 #ifndef DEBUG
 #   define log(format, ...)
@@ -31,7 +31,7 @@
 { \
     FILE *FH = fopen( "/tmp/zmgmnt.log", "a" ); \
     if( FH ) { \
-        fprintf( FH, "l. %4d: " format "\n", __LINE__, ##__VA_ARGS__ ); \
+        fprintf( FH, "line:%d: " format "\n", __LINE__, ##__VA_ARGS__ ); \
         fclose( FH ); \
     } \
 }
@@ -182,6 +182,8 @@ static int zmgfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int zmgfs_open(const char *path, struct fuse_file_info *fi) {
 
+    log("zmgfs: open %s", path);
+
     struct zmg_dir_entry *root = open_root(zmgmap);
     struct zmg_file_entry *fentry = find_file_entry_at(path, root);
 
@@ -196,6 +198,8 @@ static int zmgfs_open(const char *path, struct fuse_file_info *fi) {
 
 static int zmgfs_release(const char *path, struct fuse_file_info *fi) {
 
+    log("zmgfs: release %s", path);
+
     char *buffer = remove_cache_if_cached(path);
     if (buffer != NULL) {
         free(buffer);
@@ -205,6 +209,8 @@ static int zmgfs_release(const char *path, struct fuse_file_info *fi) {
 
 static int zmgfs_read(const char *path, char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi) {
+
+    log("zmgfs: read %s", path);
 
     struct zmg_dir_entry *root = open_root(zmgmap);
     struct zmg_file_entry *fentry = find_file_entry_at(path, root);
@@ -239,6 +245,7 @@ static int zmgfs_read(const char *path, char *buf, size_t size, off_t offset,
             size = 0;
         }
     }
+    log("zmgfs: end read %s", path);
     return (int) size;
 }
 
@@ -277,6 +284,11 @@ int main(int argc, char *argv[]) {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     if (fuse_opt_parse(&args, NULL, zmg_opts, zmg_opt_proc) == -1) {
         return -1;
+    }
+
+    if (zmgfile == NULL || mtpt == NULL) {
+        printf("Invalid arguments.\n");
+        exit(-1);
     }
 
     printf("zmg file: %s\n", zmgfile);
