@@ -14,7 +14,7 @@
 #include "utlist.h"
 
 unsigned long get_file_size(const char *path) {
-    unsigned long filesize = (unsigned long) -1;
+    unsigned long filesize = 0;
     struct stat statbuff;
     if (stat(path, &statbuff) < 0) {
         return filesize;
