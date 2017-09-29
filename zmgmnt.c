@@ -9,16 +9,20 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <memory.h>
 
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <memory.h>
+#include <pthread.h>
+
+#include "uthash.h"
 
 #include "zmgfs.h"
 
-#define DEBUG
+//#define DEBUG
 
 #ifndef DEBUG
 #   define log(format, ...)
@@ -27,7 +31,7 @@
 { \
     FILE *FH = fopen( "/tmp/zmgmnt.log", "a" ); \
     if( FH ) { \
-        fprintf( FH, "l. %4d: " format "\n", __LINE__, ##__VA_ARGS__ ); \
+        fprintf( FH, "line:%d: " format "\n", __LINE__, ##__VA_ARGS__ ); \
         fclose( FH ); \
     } \
 }
@@ -38,10 +42,80 @@ static struct fuse_opt zmg_opts[] =
                 FUSE_OPT_END
         };
 
+struct file_buffer_cache {
+    char path[256];
+    char *buffer;
+    UT_hash_handle hh;
+};
+
 char *zmgfile = NULL;
 char *mtpt = NULL;
 int zmgfd = 0;
 const char *zmgmap = NULL;
+
+pthread_mutex_t cache_mutex;
+struct file_buffer_cache *buffer_cache = NULL;
+
+int is_file_cached(const char *path) {
+    struct file_buffer_cache *cache;
+
+    pthread_mutex_lock(&cache_mutex);
+    HASH_FIND_STR(buffer_cache, path, cache);
+    pthread_mutex_unlock(&cache_mutex);
+
+    return (cache != NULL);
+}
+
+char *get_cached_buffer(const char *path) {
+    struct file_buffer_cache *cache;
+
+    pthread_mutex_lock(&cache_mutex);
+    HASH_FIND_STR(buffer_cache, path, cache);
+    pthread_mutex_unlock(&cache_mutex);
+
+    if (cache != NULL) {
+        return cache->buffer;
+    }
+    return NULL;
+}
+
+char *remove_cache_if_cached(const char *path) {
+    char *ret = NULL;
+    struct file_buffer_cache *cache;
+
+    pthread_mutex_lock(&cache_mutex);
+    HASH_FIND_STR(buffer_cache, path, cache);
+    if (cache != NULL) {
+        HASH_DEL(buffer_cache, cache);
+        char *buffer = cache->buffer;
+        free(cache);
+        ret = buffer;
+    }
+    pthread_mutex_unlock(&cache_mutex);
+
+    return ret;
+}
+
+int put_cache_if_not_cached(const char *path, char *buffer) {
+
+    assert(buffer != NULL);
+
+    int ret = 0;
+    struct file_buffer_cache *cache = NULL;
+
+    pthread_mutex_lock(&cache_mutex);
+    HASH_FIND_STR(buffer_cache, path, cache);
+    if (cache == NULL) {
+        cache = (struct file_buffer_cache *) malloc(sizeof(struct file_buffer_cache));
+        strcpy(cache->path, path);
+        cache->buffer = buffer;
+        HASH_ADD_STR(buffer_cache, path, cache);
+        ret = 1;
+    }
+    pthread_mutex_unlock(&cache_mutex);
+
+    return ret;
+}
 
 struct zmg_dir_entry *open_root(const char *zmgmap) {
     return (struct zmg_dir_entry *) (zmgmap + sizeof(struct zmg_header));
@@ -108,6 +182,8 @@ static int zmgfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int zmgfs_open(const char *path, struct fuse_file_info *fi) {
 
+    log("zmgfs: open %s", path);
+
     struct zmg_dir_entry *root = open_root(zmgmap);
     struct zmg_file_entry *fentry = find_file_entry_at(path, root);
 
@@ -120,8 +196,21 @@ static int zmgfs_open(const char *path, struct fuse_file_info *fi) {
     return -ENOENT;
 }
 
+static int zmgfs_release(const char *path, struct fuse_file_info *fi) {
+
+    log("zmgfs: release %s", path);
+
+    char *buffer = remove_cache_if_cached(path);
+    if (buffer != NULL) {
+        free(buffer);
+    }
+    return 0;
+}
+
 static int zmgfs_read(const char *path, char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi) {
+
+    log("zmgfs: read %s", path);
 
     struct zmg_dir_entry *root = open_root(zmgmap);
     struct zmg_file_entry *fentry = find_file_entry_at(path, root);
@@ -131,20 +220,32 @@ static int zmgfs_read(const char *path, char *buf, size_t size, off_t offset,
         filesize = fentry->file_size;
         if (offset < filesize) {
 
-            char *zipbuf = ((char *) fentry) + fentry->off_data;
-            char *buffer = malloc(fentry->file_size);
-            size_t sz;
-            unzip_buffer_to_buffer(zipbuf, fentry->data_size, buffer, &sz);
+            char *buffer = get_cached_buffer(path);
+            if (buffer != NULL) {
+                if (offset + size > filesize) {
+                    size = filesize - offset;
+                }
+                memcpy(buf, buffer + offset, size);
+            } else {
+                char *zipbuf = ((char *) fentry) + fentry->off_data;
+                buffer = malloc(fentry->file_size);
+                size_t sz;
+                unzip_buffer_to_buffer(zipbuf, fentry->data_size, buffer, &sz);
 
-            if (offset + size > filesize) {
-                size = filesize - offset;
+                if (offset + size > filesize) {
+                    size = filesize - offset;
+                }
+                memcpy(buf, buffer + offset, size);
+
+                if (!put_cache_if_not_cached(path, buffer)) {
+                    free(buffer);
+                }
             }
-            memcpy(buf, buffer + offset, size);
-            free(buffer);
         } else {
             size = 0;
         }
     }
+    log("zmgfs: end read %s", path);
     return (int) size;
 }
 
@@ -175,6 +276,7 @@ static struct fuse_operations zmgfs_oper = {
         .readdir    = zmgfs_readdir,
         .open        = zmgfs_open,
         .read        = zmgfs_read,
+        .release    = zmgfs_release,
 };
 
 int main(int argc, char *argv[]) {
@@ -184,8 +286,15 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    if (zmgfile == NULL || mtpt == NULL) {
+        printf("Invalid arguments.\n");
+        exit(-1);
+    }
+
     printf("zmg file: %s\n", zmgfile);
     printf("mount point: %s\n", mtpt);
+
+    pthread_mutex_init(&cache_mutex, NULL);
 
     zmgfd = open(argv[1], O_RDONLY);
     struct stat st;
