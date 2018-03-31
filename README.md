@@ -4,3 +4,12 @@
 
 * 使用makezmg将文件夹打包为压缩后的zmg文件
 * 使用zmgmnt将压缩后的zmg文件挂载至某一个文件夹
+
+##构建
+
+```
+mkdir cmake-build
+cd cmake-build
+cmake ..
+make
+```
